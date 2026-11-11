@@ -20,11 +20,12 @@ import { cn } from "@/lib/utils";
  * portfolio assistant has no reason to emit them.
  */
 
-// Matches **bold** (or __bold__), *italic*, `code`, and a bare URL, anywhere in
-// a line. Bold first so ** wins over *; italic is star-only (underscore italics
-// misfire on snake_case_words).
+// Matches Markdown links, **bold** (or __bold__), *italic*, `code`, and a bare
+// URL, anywhere in a line. Links come first so their destination isn't parsed
+// as a separate bare URL. Bold first so ** wins over *; italic is star-only
+// (underscore italics misfire on snake_case_words).
 const INLINE_RE =
-  /(\*\*|__)(?=\S)([\s\S]*?\S)\1|(\*)(?=\S)([^*_\n]*?\S)\3|`([^`\n]+)`|((?:https?:\/\/|www\.)[^\s<>()\[\]{}"']+[^\s<>()\[\]{}"',.;:!?])/g;
+  /(\[([^\]\n]+)\]\(([^)\s]+)\))|(\*\*|__)(?=\S)([\s\S]*?\S)\4|(\*)(?=\S)([^*_\n]*?\S)\6|`([^`\n]+)`|((?:https?:\/\/|www\.)[^\s<>()\[\]{}"']+[^\s<>()\[\]{}"',.;:!?])/g;
 
 const HEADING_RE = /^(#{1,3})\s+(.+)$/;
 const BULLET_RE = /^\s*[-*+]\s+(.+)$/;
@@ -32,6 +33,10 @@ const ORDERED_RE = /^\s*\d+[.)]\s+(.+)$/;
 
 function normalizeUrl(url: string) {
   return url.startsWith("www.") ? `https://${url}` : url;
+}
+
+function isSafeHref(url: string) {
+  return /^(https?:\/\/|mailto:|\/|#)/i.test(url) && !url.startsWith("//");
 }
 
 function renderInline(text: string, keyPrefix: string) {
@@ -44,8 +49,36 @@ function renderInline(text: string, keyPrefix: string) {
   while ((match = INLINE_RE.exec(text)) !== null) {
     if (match.index > cursor) nodes.push(text.slice(cursor, match.index));
 
-    const [full, boldMarker, boldText, italicMarker, italicText, codeText, urlText] = match;
-    if (boldMarker) {
+    const [
+      full,
+      markdownLink,
+      linkLabel,
+      linkDestination,
+      boldMarker,
+      boldText,
+      italicMarker,
+      italicText,
+      codeText,
+      urlText,
+    ] = match;
+    if (markdownLink && linkLabel && linkDestination) {
+      const href = normalizeUrl(linkDestination);
+      nodes.push(
+        isSafeHref(href) ? (
+          <a
+            key={`${keyPrefix}-a${i++}`}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-brand underline decoration-brand/40 underline-offset-2 hover:decoration-brand"
+          >
+            {linkLabel}
+          </a>
+        ) : (
+          <span key={`${keyPrefix}-t${i++}`}>{full}</span>
+        ),
+      );
+    } else if (boldMarker) {
       nodes.push(
         <strong key={`${keyPrefix}-b${i++}`} className="font-semibold text-foreground">
           {boldText}
